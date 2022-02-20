@@ -11,7 +11,7 @@ use futures::{
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use serde_json::value::RawValue;
-use serde_json::{from_value, to_string};
+use serde_json::{from_str, to_string};
 use std::pin::Pin;
 use tokio::sync::{broadcast, mpsc, oneshot};
 use tokio_tungstenite::connect_async;
@@ -66,7 +66,14 @@ impl Client {
         T: DeserializeOwned,
     {
         let notif = self.sub_rx.recv().await?;
-        let payload = from_value(notif.params.result)?;
+        let payload = from_str(notif.params.result.get())?;
+        payload
+    }
+
+    #[throws(SolanaClientError)]
+    pub async fn recv_raw(&mut self) -> Box<RawValue> {
+        let notif = self.sub_rx.recv().await?;
+        let payload = notif.params.result;
         payload
     }
 

@@ -1,20 +1,20 @@
 use serde::{Deserialize, Serialize};
-use serde_json::value::Value;
+use serde_json::value::RawValue;
 
 #[derive(Clone, Debug, Deserialize)]
-pub struct RpcNotificationParams<T = Value> {
+pub struct RpcNotificationParams<T = Box<RawValue>> {
     pub result: T,
 }
 
 #[derive(Clone, Debug, Deserialize)]
-pub struct RpcNotification<T = Value> {
+pub struct RpcNotification<T = Box<RawValue>> {
     pub jsonrpc: String,
     pub method: String,
     pub params: RpcNotificationParams<T>,
 }
 
 #[derive(Clone, Debug, Serialize)]
-pub struct RpcRequest<T = Value> {
+pub struct RpcRequest<T = Box<RawValue>> {
     pub jsonrpc: String,
     pub id: u64,
     pub method: String,
@@ -36,7 +36,7 @@ where
 }
 
 #[derive(Clone, Debug, Deserialize)]
-pub struct RpcResponse<T = Value> {
+pub struct RpcResponse<T = Box<RawValue>> {
     pub jsonrpc: String,
     pub id: u64,
     pub result: T,

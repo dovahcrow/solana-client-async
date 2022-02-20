@@ -105,23 +105,24 @@ impl BackgroundProcess {
             }
         };
 
-        let msg: Either<RpcNotification, RpcResponse> = from_str(&msg)?;
-        match msg {
-            Either::Left(notif) => {
+        match from_str::<RpcNotification>(&msg) {
+            Ok(notif) => {
                 if let Err(_) = self.sub_tx.send(notif) {
                     warn!("Subscription tx droppped");
                 }
+                return;
             }
-            Either::Right(resp) => {
-                let id = resp.id;
-                if let Some(responder) = self.pendings.remove(&id) {
-                    if let Err(_) = responder.send(resp) {
-                        warn!("Responder for req: {} droppped", id);
-                    }
-                } else {
-                    warn!("Responder for req: {} not found", id);
-                }
+            Err(_) => {}
+        }
+
+        let resp = from_str::<RpcResponse>(&msg)?;
+        let id = resp.id;
+        if let Some(responder) = self.pendings.remove(&id) {
+            if let Err(_) = responder.send(resp) {
+                warn!("Responder for req: {} droppped", id);
             }
+        } else {
+            warn!("Responder for req: {} not found", id);
         }
     }
 
