@@ -1,4 +1,3 @@
-use serde_json::Value;
 use solana_client::rpc_response::SlotInfo;
 use solana_client_async::prelude::*;
 
@@ -10,12 +9,7 @@ async fn main() {
         .await
         .unwrap();
 
-    client
-        .request("slotSubscribe", &Value::Null)
-        .await
-        .unwrap()
-        .await
-        .unwrap(); // Double await because the first await is for `Send` and the second one for `Receive`. It is fine to drop the second one.
+    client.slot_subscribe().await.unwrap().await.unwrap(); // Double await because the first await is for `Send` and the second one for `Receive`. It is fine to drop the second one.
 
     loop {
         let slot = client.recv::<SlotInfo>().await.unwrap();
