@@ -1,14 +1,8 @@
-# Solana Websocket Client With Async
-
-This library is in its early stage, not all the subscription method are implemented.
-
-However, you can still enjoy the async/await support and auto keep-alive feature provided by this library,
-with a little additional effort on using `Client::request` and `Client::recv_raw` to do the request
-contructing and message parsing.
+# Solana Websocket Client With Async ![CI](https://github.com/dovahcrow/solana-client-async/actions/workflows/ci/badge.svg)
 
 # Motivation
 
-The original solana websocket client is good but lacks some important features, including
+The official solana websocket client is good but lacks important features like
 async/await and heartbeat to keep the stream alive.
 
 This implementation of the client fixes these problem. 
@@ -29,13 +23,13 @@ async fn main() {
         .await
         .unwrap();
 
-    client.slot_subscribe().await.unwrap().await.unwrap(); // Double await because the first await is for `Send` and the second one for `Receive`. It is fine to drop the second one.
+    let _subscription_id: usize = client.slot_subscribe().await.unwrap().await.unwrap(); // Double await because the first await is for `Send` and the second one for `Receive`. It is fine to drop the second one.
 
     loop {
         let slot = client.recv::<SlotInfo>().await.unwrap();
         println!("slot {:?}", slot);
     }
 }
-
 ```
 
+Take a look at the [examples](/examples) or [tests](/tests) for more examples.

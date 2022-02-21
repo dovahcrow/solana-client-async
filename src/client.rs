@@ -1,17 +1,26 @@
-use crate::errors::SolanaClientError;
 use crate::{
     background::BackgroundProcess,
+    errors::SolanaClientError,
     rpc_message::{RpcError, RpcNotification, RpcResponse},
+    Responder,
 };
 use fehler::{throw, throws};
 use futures::{
     task::{Context, Poll},
     Future,
 };
+use paste::paste;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use serde_json::value::{RawValue, Value};
-use serde_json::{from_str, to_string};
+use serde_json::{from_str, json, to_string};
+use solana_client::rpc_config::{
+    RpcAccountInfoConfig, RpcBlockSubscribeConfig, RpcBlockSubscribeFilter,
+    RpcProgramAccountsConfig, RpcSignatureSubscribeConfig, RpcTransactionLogsConfig,
+    RpcTransactionLogsFilter,
+};
+use solana_sdk::pubkey::Pubkey;
+use solana_sdk::signature::Signature;
 use std::marker::PhantomData;
 use std::pin::Pin;
 use tokio::sync::{broadcast, mpsc, oneshot};
@@ -55,12 +64,20 @@ impl ClientBuilder {
     }
 }
 
+macro_rules! unsubscribe_method {
+    ($meth:ident) => {
+        paste! {
+            #[throws(SolanaClientError)]
+            pub async fn [<$meth _unsubscribe>](&mut self, subscription_id: usize) -> ResponseAwaiter<bool> {
+                let awaiter = self.request(concat!(stringify!($meth), "Unsubscribe"), &[subscription_id]).await?;
+                awaiter
+            }
+        }
+    };
+}
+
 pub struct Client {
-    req_tx: mpsc::Sender<(
-        String,
-        Box<RawValue>,
-        oneshot::Sender<Result<RpcResponse, RpcError>>,
-    )>,
+    req_tx: mpsc::Sender<(String, Box<RawValue>, Responder)>,
     sub_rx: broadcast::Receiver<RpcNotification>,
 }
 
@@ -83,10 +100,93 @@ impl Client {
     }
 
     #[throws(SolanaClientError)]
+    pub async fn account_subscribe(
+        &mut self,
+        pubkey: &Pubkey,
+        config: Option<RpcAccountInfoConfig>,
+    ) -> ResponseAwaiter<usize> {
+        let awaiter = self
+            .request("accountSubscribe", &json! {[pubkey.to_string(), config]})
+            .await?;
+        awaiter
+    }
+    unsubscribe_method!(account);
+
+    #[throws(SolanaClientError)]
+    pub async fn block_subscribe(
+        &mut self,
+        filter: RpcBlockSubscribeFilter,
+        config: Option<RpcBlockSubscribeConfig>,
+    ) -> ResponseAwaiter<usize> {
+        let awaiter = self
+            .request("blockSubscribe", &json! {[filter, config]})
+            .await?;
+        awaiter
+    }
+    unsubscribe_method!(block);
+
+    #[throws(SolanaClientError)]
+    pub async fn logs_subscribe(
+        &mut self,
+        filter: RpcTransactionLogsFilter,
+        config: RpcTransactionLogsConfig,
+    ) -> ResponseAwaiter<usize> {
+        let awaiter = self
+            .request("logsSubscribe", &json! {[filter, config]})
+            .await?;
+        awaiter
+    }
+    unsubscribe_method!(logs);
+
+    #[throws(SolanaClientError)]
+    pub async fn program_subscribe(
+        &mut self,
+        pubkey: &Pubkey,
+        config: Option<RpcProgramAccountsConfig>,
+    ) -> ResponseAwaiter<usize> {
+        let awaiter = self
+            .request("programSubscribe", &json! {[pubkey.to_string(), config]})
+            .await?;
+        awaiter
+    }
+    unsubscribe_method!(program);
+
+    #[throws(SolanaClientError)]
+    pub async fn vote_subscribe(&mut self) -> ResponseAwaiter<usize> {
+        let awaiter = self.request("voteSubscribe", &Value::Null).await?;
+        awaiter
+    }
+    unsubscribe_method!(vote);
+
+    #[throws(SolanaClientError)]
+    pub async fn root_subscribe(&mut self) -> ResponseAwaiter<usize> {
+        let awaiter = self.request("rootSubscribe", &Value::Null).await?;
+        awaiter
+    }
+    unsubscribe_method!(root);
+
+    #[throws(SolanaClientError)]
     pub async fn slot_subscribe(&mut self) -> ResponseAwaiter<usize> {
         let awaiter = self.request("slotSubscribe", &Value::Null).await?;
         awaiter
     }
+    unsubscribe_method!(slot);
+
+    #[throws(SolanaClientError)]
+    pub async fn signature_subscribe(
+        &mut self,
+        signature: &Signature,
+        config: Option<RpcSignatureSubscribeConfig>,
+    ) -> ResponseAwaiter<usize> {
+        let awaiter = self
+            .request(
+                "signatureSubscribe",
+                &json! {[signature.to_string(), config]},
+            )
+            .await?;
+        awaiter
+    }
+    unsubscribe_method!(signature);
 
     #[throws(SolanaClientError)]
     pub async fn request<T, R>(&mut self, method: &str, params: &T) -> ResponseAwaiter<R>
@@ -98,7 +198,7 @@ impl Client {
 
         let (tx, rx) = oneshot::channel();
 
-        if let Err(_) = self.req_tx.send((method.into(), params, tx)).await {
+        if self.req_tx.send((method.into(), params, tx)).await.is_err() {
             throw!(SolanaClientError::BackgroundProcessExited);
         }
 

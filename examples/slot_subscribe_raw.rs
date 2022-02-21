@@ -9,7 +9,7 @@ async fn main() {
         .await
         .unwrap();
 
-    client
+    let _subscription_id: usize = client
         .request("slotSubscribe", &Value::Null)
         .await
         .unwrap()

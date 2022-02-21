@@ -11,12 +11,12 @@ pub enum SolanaClientError {
     #[error("RPC Error: {code}: {message}")]
     RpcError { code: i64, message: String },
 
-    #[error("Websocket error: {0}")]
+    #[error(transparent)]
     Websocket(#[from] tungstenite::Error),
 
-    #[error("Json error: {0}")]
+    #[error(transparent)]
     Json(#[from] serde_json::Error),
 
-    #[error("Subscription error: {0}")]
+    #[error(transparent)]
     Subscription(#[from] tokio::sync::broadcast::error::RecvError),
 }

@@ -1,6 +1,6 @@
 use crate::errors::SolanaClientError;
 use crate::rpc_message::{RpcError, RpcNotification, RpcRequest, RpcResponse};
-use crate::WsStream;
+use crate::{Responder, WsStream};
 use fehler::throws;
 use futures::{SinkExt, StreamExt};
 use log::{debug, error, trace, warn};
@@ -19,27 +19,20 @@ pub struct BackgroundProcess {
     pendings: HashMap<u64, oneshot::Sender<Result<RpcResponse, RpcError>>>,
     ws: WsStream,
     sub_tx: broadcast::Sender<RpcNotification>,
-    request_rx: mpsc::Receiver<(
-        String,
-        Box<RawValue>,
-        oneshot::Sender<Result<RpcResponse, RpcError>>,
-    )>,
+    request_rx: mpsc::Receiver<(String, Box<RawValue>, Responder)>,
     ping_timer: Interval,
     reqid: u64,
 }
 
 impl BackgroundProcess {
+    #[allow(clippy::type_complexity)]
     pub fn new(
         stream: WsStream,
         ping_every: u64,
     ) -> (
         Self,
         broadcast::Receiver<RpcNotification>,
-        mpsc::Sender<(
-            String,
-            Box<RawValue>,
-            oneshot::Sender<Result<RpcResponse, RpcError>>,
-        )>,
+        mpsc::Sender<(String, Box<RawValue>, Responder)>,
     ) {
         let (request_tx, request_rx) = mpsc::channel(1024);
         let (sub_tx, sub_rx) = broadcast::channel(1024);
@@ -120,7 +113,7 @@ impl BackgroundProcess {
 
         match from_str::<RpcNotification>(&msg) {
             Ok(notif) => {
-                if let Err(_) = self.sub_tx.send(notif) {
+                if self.sub_tx.send(notif).is_err() {
                     warn!("Subscription tx droppped");
                 }
                 return;
@@ -132,7 +125,7 @@ impl BackgroundProcess {
             Ok(resp) => {
                 let id = resp.id;
                 if let Some(responder) = self.pendings.remove(&id) {
-                    if let Err(_) = responder.send(Ok(resp)) {
+                    if responder.send(Ok(resp)).is_err() {
                         warn!("Responder for req: {} droppped", id);
                     }
                 } else {
@@ -147,7 +140,7 @@ impl BackgroundProcess {
             Ok(error) => {
                 let id = error.id;
                 if let Some(responder) = self.pendings.remove(&id) {
-                    if let Err(_) = responder.send(Err(error)) {
+                    if responder.send(Err(error)).is_err() {
                         warn!("Responder for req: {} droppped", id);
                     }
                 } else {
@@ -166,14 +159,7 @@ impl BackgroundProcess {
     }
 
     #[throws(SolanaClientError)]
-    pub async fn process_req(
-        &mut self,
-        rr: Option<(
-            String,
-            Box<RawValue>,
-            oneshot::Sender<Result<RpcResponse, RpcError>>,
-        )>,
-    ) {
+    pub async fn process_req(&mut self, rr: Option<(String, Box<RawValue>, Responder)>) {
         trace!("[Background] Received request {:?}", rr);
 
         let (method, params, responder) = if let Some(r) = rr {
