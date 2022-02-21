@@ -1,4 +1,4 @@
-# Solana Websocket Client With Async ![CI](https://github.com/dovahcrow/solana-client-async/actions/workflows/ci/badge.svg)
+# Solana Websocket Client With Async ![CI](https://github.com/dovahcrow/solana-client-async/actions/workflows/ci.yml/badge.svg)
 
 # Motivation
 
