@@ -1,15 +1,15 @@
 # Solana Websocket Client With Async ![CI](https://github.com/dovahcrow/solana-client-async/actions/workflows/ci.yml/badge.svg)
 
-# Motivation
+## Motivation
 
 The official solana websocket client is good but lacks important features like
 async/await and heartbeat to keep the stream alive.
 
 This implementation of the client fixes these problem. 
 
-# Usage
+## Usage
 
-## Subscribe to slot
+### Subscribe to slot
 
 ```rust
 use solana_client::rpc_response::SlotInfo;
