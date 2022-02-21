@@ -1,7 +1,7 @@
 use crate::errors::SolanaClientError;
 use crate::{
     background::BackgroundProcess,
-    rpc_message::{RpcNotification, RpcResponse},
+    rpc_message::{RpcError, RpcNotification, RpcResponse},
 };
 use fehler::{throw, throws};
 use futures::{
@@ -12,6 +12,7 @@ use serde::de::DeserializeOwned;
 use serde::Serialize;
 use serde_json::value::{RawValue, Value};
 use serde_json::{from_str, to_string};
+use std::marker::PhantomData;
 use std::pin::Pin;
 use tokio::sync::{broadcast, mpsc, oneshot};
 use tokio_tungstenite::connect_async;
@@ -55,7 +56,11 @@ impl ClientBuilder {
 }
 
 pub struct Client {
-    req_tx: mpsc::Sender<(String, Box<RawValue>, oneshot::Sender<RpcResponse>)>,
+    req_tx: mpsc::Sender<(
+        String,
+        Box<RawValue>,
+        oneshot::Sender<Result<RpcResponse, RpcError>>,
+    )>,
     sub_rx: broadcast::Receiver<RpcNotification>,
 }
 
@@ -78,13 +83,13 @@ impl Client {
     }
 
     #[throws(SolanaClientError)]
-    pub async fn slot_subscribe(&mut self) -> ResponseAwaiter {
+    pub async fn slot_subscribe(&mut self) -> ResponseAwaiter<usize> {
         let awaiter = self.request("slotSubscribe", &Value::Null).await?;
         awaiter
     }
 
     #[throws(SolanaClientError)]
-    pub async fn request<T>(&mut self, method: &str, params: &T) -> ResponseAwaiter
+    pub async fn request<T, R>(&mut self, method: &str, params: &T) -> ResponseAwaiter<R>
     where
         T: Serialize,
     {
@@ -97,21 +102,38 @@ impl Client {
             throw!(SolanaClientError::BackgroundProcessExited);
         }
 
-        ResponseAwaiter { rx }
+        ResponseAwaiter {
+            rx,
+            _phantom: PhantomData,
+        }
     }
 }
 
-pub struct ResponseAwaiter {
-    rx: oneshot::Receiver<RpcResponse>,
+pub struct ResponseAwaiter<T> {
+    rx: oneshot::Receiver<Result<RpcResponse, RpcError>>,
+    _phantom: PhantomData<T>,
 }
 
-impl Future for ResponseAwaiter {
-    type Output = Result<RpcResponse, SolanaClientError>;
+impl<T> Future for ResponseAwaiter<T>
+where
+    T: DeserializeOwned,
+{
+    type Output = Result<T, SolanaClientError>;
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let this = self.get_mut();
+        let this = unsafe { self.get_unchecked_mut() }; // todo why is PhantomData<T> asked for T to be unpin?
         let rx = Pin::new(&mut this.rx);
 
-        rx.poll(cx)
-            .map(|r| r.map_err(|_| SolanaClientError::ResponderClosed))
+        match rx.poll(cx) {
+            Poll::Pending => Poll::Pending,
+            Poll::Ready(Err(_)) => Poll::Ready(Err(SolanaClientError::ResponderClosed)),
+            Poll::Ready(Ok(Ok(r))) => match from_str(r.result.get()) {
+                Ok(r) => Poll::Ready(Ok(r)),
+                Err(e) => Poll::Ready(Err(SolanaClientError::Json(e))),
+            },
+            Poll::Ready(Ok(Err(e))) => Poll::Ready(Err(SolanaClientError::RpcError {
+                code: e.error.code,
+                message: e.error.message,
+            })),
+        }
     }
 }

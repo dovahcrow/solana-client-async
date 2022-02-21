@@ -41,3 +41,16 @@ pub struct RpcResponse<T = Box<RawValue>> {
     pub id: u64,
     pub result: T,
 }
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct RpcError {
+    pub jsonrpc: String,
+    pub id: u64,
+    pub error: RpcErrorBody,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct RpcErrorBody {
+    pub code: i64,
+    pub message: String,
+}

@@ -1,5 +1,5 @@
 use crate::errors::SolanaClientError;
-use crate::rpc_message::{RpcNotification, RpcRequest, RpcResponse};
+use crate::rpc_message::{RpcError, RpcNotification, RpcRequest, RpcResponse};
 use crate::WsStream;
 use fehler::throws;
 use futures::{SinkExt, StreamExt};
@@ -16,10 +16,14 @@ use tokio::{
 use tungstenite::Message;
 
 pub struct BackgroundProcess {
-    pendings: HashMap<u64, oneshot::Sender<RpcResponse>>,
+    pendings: HashMap<u64, oneshot::Sender<Result<RpcResponse, RpcError>>>,
     ws: WsStream,
     sub_tx: broadcast::Sender<RpcNotification>,
-    request_rx: mpsc::Receiver<(String, Box<RawValue>, oneshot::Sender<RpcResponse>)>,
+    request_rx: mpsc::Receiver<(
+        String,
+        Box<RawValue>,
+        oneshot::Sender<Result<RpcResponse, RpcError>>,
+    )>,
     ping_timer: Interval,
     reqid: u64,
 }
@@ -31,7 +35,11 @@ impl BackgroundProcess {
     ) -> (
         Self,
         broadcast::Receiver<RpcNotification>,
-        mpsc::Sender<(String, Box<RawValue>, oneshot::Sender<RpcResponse>)>,
+        mpsc::Sender<(
+            String,
+            Box<RawValue>,
+            oneshot::Sender<Result<RpcResponse, RpcError>>,
+        )>,
     ) {
         let (request_tx, request_rx) = mpsc::channel(1024);
         let (sub_tx, sub_rx) = broadcast::channel(1024);
@@ -89,9 +97,12 @@ impl BackgroundProcess {
     #[throws(SolanaClientError)]
     pub async fn process_ws(&mut self, msg: Option<Result<Message, tungstenite::Error>>) {
         trace!("[Background] Received ws message {:?}", msg);
-        if msg.is_none() {}
 
-        let msg = msg.unwrap()?;
+        let msg = if let Some(m) = msg {
+            m?
+        } else {
+            return;
+        };
 
         let msg = match msg {
             Message::Text(msg) => msg,
@@ -105,6 +116,8 @@ impl BackgroundProcess {
             }
         };
 
+        let mut errors = vec![];
+
         match from_str::<RpcNotification>(&msg) {
             Ok(notif) => {
                 if let Err(_) = self.sub_tx.send(notif) {
@@ -112,28 +125,62 @@ impl BackgroundProcess {
                 }
                 return;
             }
-            Err(_) => {}
+            Err(e) => errors.push(e),
         }
 
-        let resp = from_str::<RpcResponse>(&msg)?;
-        let id = resp.id;
-        if let Some(responder) = self.pendings.remove(&id) {
-            if let Err(_) = responder.send(resp) {
-                warn!("Responder for req: {} droppped", id);
+        match from_str::<RpcResponse>(&msg) {
+            Ok(resp) => {
+                let id = resp.id;
+                if let Some(responder) = self.pendings.remove(&id) {
+                    if let Err(_) = responder.send(Ok(resp)) {
+                        warn!("Responder for req: {} droppped", id);
+                    }
+                } else {
+                    warn!("Responder for req: {} not found", id);
+                }
+                return;
             }
-        } else {
-            warn!("Responder for req: {} not found", id);
+            Err(e) => errors.push(e),
+        }
+
+        match from_str::<RpcError>(&msg) {
+            Ok(error) => {
+                let id = error.id;
+                if let Some(responder) = self.pendings.remove(&id) {
+                    if let Err(_) = responder.send(Err(error)) {
+                        warn!("Responder for req: {} droppped", id);
+                    }
+                } else {
+                    warn!("Responder for req: {} not found", id);
+                }
+                return;
+            }
+            Err(e) => {
+                errors.push(e);
+                warn!(
+                    "Cannot deserialize ws message {}, errors: {:?}",
+                    msg, errors
+                );
+            }
         }
     }
 
     #[throws(SolanaClientError)]
     pub async fn process_req(
         &mut self,
-        rr: Option<(String, Box<RawValue>, oneshot::Sender<RpcResponse>)>,
+        rr: Option<(
+            String,
+            Box<RawValue>,
+            oneshot::Sender<Result<RpcResponse, RpcError>>,
+        )>,
     ) {
         trace!("[Background] Received request {:?}", rr);
 
-        let (method, params, responder) = rr.unwrap();
+        let (method, params, responder) = if let Some(r) = rr {
+            r
+        } else {
+            return;
+        };
         let id = self.id();
         let req = RpcRequest::new(id, &method, params);
         let exist = self.pendings.insert(id, responder);

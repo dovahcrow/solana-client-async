@@ -8,6 +8,9 @@ pub enum SolanaClientError {
     #[error("Responder closed")]
     ResponderClosed,
 
+    #[error("RPC Error: {code}: {message}")]
+    RpcError { code: i64, message: String },
+
     #[error("Websocket error: {0}")]
     Websocket(#[from] tungstenite::Error),
 
