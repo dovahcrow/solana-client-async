@@ -4,6 +4,7 @@ use serde_json::value::RawValue;
 #[derive(Clone, Debug, Deserialize)]
 pub struct RpcNotificationParams<T = Box<RawValue>> {
     pub result: T,
+    pub subscription: u64,
 }
 
 #[derive(Clone, Debug, Deserialize)]
