@@ -83,20 +83,19 @@ pub struct Client {
 
 impl Client {
     #[throws(SolanaClientError)]
-    pub async fn recv<T>(&mut self) -> T
+    pub async fn recv<T>(&mut self) -> (u64, T)
     where
         T: DeserializeOwned,
     {
-        let notif = self.recv_raw().await?;
+        let (subid, notif) = self.recv_raw().await?;
         let payload = from_str(notif.get())?;
-        payload
+        (subid, payload)
     }
 
     #[throws(SolanaClientError)]
-    pub async fn recv_raw(&mut self) -> Box<RawValue> {
+    pub async fn recv_raw(&mut self) -> (u64, Box<RawValue>) {
         let notif = self.sub_rx.recv().await?;
-        let payload = notif.params.result;
-        payload
+        (notif.params.subscription, notif.params.result)
     }
 
     #[throws(SolanaClientError)]
@@ -104,7 +103,7 @@ impl Client {
         &mut self,
         pubkey: &Pubkey,
         config: Option<RpcAccountInfoConfig>,
-    ) -> ResponseAwaiter<usize> {
+    ) -> ResponseAwaiter<u64> {
         let awaiter = self
             .request("accountSubscribe", &json! {[pubkey.to_string(), config]})
             .await?;
@@ -117,7 +116,7 @@ impl Client {
         &mut self,
         filter: RpcBlockSubscribeFilter,
         config: Option<RpcBlockSubscribeConfig>,
-    ) -> ResponseAwaiter<usize> {
+    ) -> ResponseAwaiter<u64> {
         let awaiter = self
             .request("blockSubscribe", &json! {[filter, config]})
             .await?;
@@ -130,7 +129,7 @@ impl Client {
         &mut self,
         filter: RpcTransactionLogsFilter,
         config: RpcTransactionLogsConfig,
-    ) -> ResponseAwaiter<usize> {
+    ) -> ResponseAwaiter<u64> {
         let awaiter = self
             .request("logsSubscribe", &json! {[filter, config]})
             .await?;
@@ -143,7 +142,7 @@ impl Client {
         &mut self,
         pubkey: &Pubkey,
         config: Option<RpcProgramAccountsConfig>,
-    ) -> ResponseAwaiter<usize> {
+    ) -> ResponseAwaiter<u64> {
         let awaiter = self
             .request("programSubscribe", &json! {[pubkey.to_string(), config]})
             .await?;
@@ -152,21 +151,21 @@ impl Client {
     unsubscribe_method!(program);
 
     #[throws(SolanaClientError)]
-    pub async fn vote_subscribe(&mut self) -> ResponseAwaiter<usize> {
+    pub async fn vote_subscribe(&mut self) -> ResponseAwaiter<u64> {
         let awaiter = self.request("voteSubscribe", &Value::Null).await?;
         awaiter
     }
     unsubscribe_method!(vote);
 
     #[throws(SolanaClientError)]
-    pub async fn root_subscribe(&mut self) -> ResponseAwaiter<usize> {
+    pub async fn root_subscribe(&mut self) -> ResponseAwaiter<u64> {
         let awaiter = self.request("rootSubscribe", &Value::Null).await?;
         awaiter
     }
     unsubscribe_method!(root);
 
     #[throws(SolanaClientError)]
-    pub async fn slot_subscribe(&mut self) -> ResponseAwaiter<usize> {
+    pub async fn slot_subscribe(&mut self) -> ResponseAwaiter<u64> {
         let awaiter = self.request("slotSubscribe", &Value::Null).await?;
         awaiter
     }
@@ -177,7 +176,7 @@ impl Client {
         &mut self,
         signature: &Signature,
         config: Option<RpcSignatureSubscribeConfig>,
-    ) -> ResponseAwaiter<usize> {
+    ) -> ResponseAwaiter<u64> {
         let awaiter = self
             .request(
                 "signatureSubscribe",
