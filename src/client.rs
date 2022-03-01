@@ -9,6 +9,7 @@ use futures::{
     task::{Context, Poll},
     Future,
 };
+use log::trace;
 use paste::paste;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
@@ -88,6 +89,7 @@ impl Client {
         T: DeserializeOwned,
     {
         let (subid, notif) = self.recv_raw().await?;
+        trace!("[Client] Recv payload: {}", notif);
         let payload = from_str(notif.get())?;
         (subid, payload)
     }
