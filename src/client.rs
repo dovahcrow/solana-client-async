@@ -1,6 +1,6 @@
 use crate::{
     background::BackgroundProcess,
-    errors::SolanaClientError,
+    errors::{Result as MyResult, SolanaClientError},
     rpc_message::{RpcError, RpcNotification, RpcResponse},
     Responder,
 };
@@ -78,7 +78,7 @@ macro_rules! unsubscribe_method {
 
 pub struct Client {
     req_tx: mpsc::Sender<(String, Box<RawValue>, Responder)>,
-    sub_rx: broadcast::Receiver<RpcNotification>,
+    sub_rx: broadcast::Receiver<MyResult<RpcNotification>>,
 }
 
 impl Client {
@@ -94,7 +94,7 @@ impl Client {
 
     #[throws(SolanaClientError)]
     pub async fn recv_raw(&mut self) -> (u64, Box<RawValue>) {
-        let notif = self.sub_rx.recv().await?;
+        let notif = self.sub_rx.recv().await??;
         (notif.params.subscription, notif.params.result)
     }
 

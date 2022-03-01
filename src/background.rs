@@ -1,7 +1,7 @@
-use crate::errors::SolanaClientError;
+use crate::errors::{Result as MyResult, SolanaClientError};
 use crate::rpc_message::{RpcError, RpcNotification, RpcRequest, RpcResponse};
 use crate::{Responder, WsStream};
-use fehler::throws;
+use fehler::{throw, throws};
 use futures::{SinkExt, StreamExt};
 use log::{debug, error, trace, warn};
 use serde::Deserialize;
@@ -18,7 +18,7 @@ use tungstenite::Message;
 pub struct BackgroundProcess {
     pendings: HashMap<u64, oneshot::Sender<Result<RpcResponse, RpcError>>>,
     ws: WsStream,
-    sub_tx: broadcast::Sender<RpcNotification>,
+    sub_tx: broadcast::Sender<MyResult<RpcNotification>>,
     request_rx: mpsc::Receiver<(String, Box<RawValue>, Responder)>,
     ping_timer: Interval,
     reqid: u64,
@@ -31,7 +31,7 @@ impl BackgroundProcess {
         ping_every: u64,
     ) -> (
         Self,
-        broadcast::Receiver<RpcNotification>,
+        broadcast::Receiver<MyResult<RpcNotification>>,
         mpsc::Sender<(String, Box<RawValue>, Responder)>,
     ) {
         let (request_tx, request_rx) = mpsc::channel(1024);
@@ -69,8 +69,42 @@ impl BackgroundProcess {
         loop {
             select! {
                 _ = self.ping_timer.tick() => { self.ping().await? }
-                msg = self.ws.next() => { self.process_ws(msg).await? }
-                req = self.request_rx.recv() => { self.process_req(req).await? }
+                msg = self.ws.next() => {
+                    if msg.is_none() {
+                        let _ = self.sub_tx.send(Err(SolanaClientError::WsClosed(None)));
+                        throw!(SolanaClientError::WsClosed(None));
+                    }
+                    if let Err(e) = self.process_ws(msg.unwrap()?).await {
+                        let _ = self.sub_tx.send(Err(e.clone()));
+                        throw!(e);
+                    }
+                }
+                req = self.request_rx.recv() => {
+                    if req.is_none() {
+                        warn!("Request rx exited");
+                        break;
+                    }
+                    if let Err(e) = self.process_req(req.unwrap()).await {
+                        let _ = self.sub_tx.send(Err(e.clone()));
+                        throw!(e);
+                    }
+                }
+            }
+        }
+
+        loop {
+            select! {
+                _ = self.ping_timer.tick() => { self.ping().await? }
+                msg = self.ws.next() => {
+                    if msg.is_none() {
+                        let _ = self.sub_tx.send(Err(SolanaClientError::WsClosed(None)));
+                        throw!(SolanaClientError::WsClosed(None));
+                    }
+                    if let Err(e) = self.process_ws(msg.unwrap()?).await {
+                        let _ = self.sub_tx.send(Err(e.clone()));
+                        throw!(e);
+                    }
+                }
             }
         }
     }
@@ -88,14 +122,8 @@ impl BackgroundProcess {
     }
 
     #[throws(SolanaClientError)]
-    pub async fn process_ws(&mut self, msg: Option<Result<Message, tungstenite::Error>>) {
+    pub async fn process_ws(&mut self, msg: Message) {
         trace!("[Background] Received ws message {:?}", msg);
-
-        let msg = if let Some(m) = msg {
-            m?
-        } else {
-            return;
-        };
 
         let msg = match msg {
             Message::Text(msg) => msg,
@@ -104,6 +132,9 @@ impl BackgroundProcess {
                 return;
             }
             Message::Pong(_) => return,
+            Message::Close(reason) => {
+                throw!(SolanaClientError::WsClosed(reason.map(|r| r.to_string())));
+            }
             _ => {
                 unreachable!()
             }
@@ -113,7 +144,7 @@ impl BackgroundProcess {
 
         match from_str::<RpcNotification>(&msg) {
             Ok(notif) => {
-                if self.sub_tx.send(notif).is_err() {
+                if self.sub_tx.send(Ok(notif)).is_err() {
                     warn!("Subscription tx droppped");
                 }
                 return;
@@ -159,14 +190,10 @@ impl BackgroundProcess {
     }
 
     #[throws(SolanaClientError)]
-    pub async fn process_req(&mut self, rr: Option<(String, Box<RawValue>, Responder)>) {
+    pub async fn process_req(&mut self, rr: (String, Box<RawValue>, Responder)) {
         trace!("[Background] Received request {:?}", rr);
 
-        let (method, params, responder) = if let Some(r) = rr {
-            r
-        } else {
-            return;
-        };
+        let (method, params, responder) = rr;
         let id = self.id();
         let req = RpcRequest::new(id, &method, params);
         let exist = self.pendings.insert(id, responder);
