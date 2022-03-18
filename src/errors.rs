@@ -27,6 +27,9 @@ pub enum SolanaClientError {
 
     #[error(transparent)]
     Subscription(#[from] tokio::sync::broadcast::error::RecvError),
+
+    #[error(transparent)]
+    Http(#[from] http::Error),
 }
 
 impl Clone for SolanaClientError {
@@ -37,6 +40,7 @@ impl Clone for SolanaClientError {
             Websocket(e) => Upstream(format!("Websocket error: {:?}", e)),
             Json(e) => Upstream(format!("Json error: {:?}", e)),
             Subscription(e) => Upstream(format!("Subscription error: {:?}", e)),
+            Http(e) => Upstream(format!("Http error: {:?}", e)),
             BackgroundProcessExited => BackgroundProcessExited,
             ResponderClosed => ResponderClosed,
             WsClosed(s) => WsClosed(s.clone()),

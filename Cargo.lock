@@ -2440,6 +2440,7 @@ version = "0.1.0"
 dependencies = [
  "fehler",
  "futures",
+ "http",
  "log",
  "paste",
  "serde",

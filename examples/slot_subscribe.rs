@@ -9,7 +9,7 @@ async fn main() {
         .await
         .unwrap();
 
-    let _subscription_id: usize = client.slot_subscribe().await.unwrap().await.unwrap(); // Double await because the first await is for `Send` and the second one for `Receive`. It is fine to drop the second one.
+    let _subscription_id: u64 = client.slot_subscribe().await.unwrap().await.unwrap(); // Double await because the first await is for `Send` and the second one for `Receive`. It is fine to drop the second one.
 
     loop {
         let slot = client.recv::<SlotInfo>().await.unwrap();

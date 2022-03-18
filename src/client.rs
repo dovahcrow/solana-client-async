@@ -9,6 +9,7 @@ use futures::{
     task::{Context, Poll},
     Future,
 };
+use http::request::Request;
 use log::trace;
 use paste::paste;
 use serde::de::DeserializeOwned;
@@ -29,6 +30,7 @@ use tokio_tungstenite::connect_async;
 
 #[derive(Default, Debug, Clone)]
 pub struct ClientBuilder {
+    referrer: Option<String>,
     url: Option<String>,
     ws_url: Option<String>,
     ping_every: Option<u64>,
@@ -37,6 +39,11 @@ pub struct ClientBuilder {
 impl ClientBuilder {
     pub fn new() -> Self {
         Default::default()
+    }
+
+    pub fn referrer(&mut self, referrer: &str) -> &mut Self {
+        self.referrer = Some(referrer.into());
+        self
     }
 
     pub fn url(&mut self, url: &str) -> &mut Self {
@@ -56,7 +63,12 @@ impl ClientBuilder {
 
     #[throws(SolanaClientError)]
     pub async fn build(&mut self) -> Client {
-        let (stream, _) = connect_async(self.ws_url.as_ref().unwrap()).await?;
+        let mut builder = Request::builder().uri(self.ws_url.as_ref().unwrap());
+        if let Some(referrer) = &self.referrer {
+            builder = builder.header("Referer", referrer);
+        }
+
+        let (stream, _) = connect_async(builder.body(())?).await?;
 
         let (bp, sub_rx, req_tx) = BackgroundProcess::new(stream, self.ping_every.unwrap_or(5));
         bp.start();
