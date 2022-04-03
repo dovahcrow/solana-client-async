@@ -145,7 +145,7 @@ impl BackgroundProcess {
         match from_str::<RpcNotification>(&msg) {
             Ok(notif) => {
                 if self.sub_tx.send(Ok(notif)).is_err() {
-                    warn!("Subscription tx droppped");
+                    throw!(SolanaClientError::SubscriptionDropped)
                 }
                 return;
             }

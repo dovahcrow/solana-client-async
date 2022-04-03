@@ -10,6 +10,9 @@ pub enum SolanaClientError {
     #[error("Responder closed")]
     ResponderClosed,
 
+    #[error("Subscription receiver is dropped")]
+    SubscriptionDropped,
+
     #[error("Websocket closed, reason: {0:?}")]
     WsClosed(Option<String>),
 
@@ -49,6 +52,7 @@ impl Clone for SolanaClientError {
                 message: message.clone(),
             },
             Upstream(s) => Upstream(s.clone()),
+            SubscriptionDropped => SubscriptionDropped,
         }
     }
 }
