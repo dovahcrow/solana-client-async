@@ -69,7 +69,7 @@ impl ClientBuilder {
         let ws_url = self.ws_url.as_ref().unwrap();
         let url = Url::parse(ws_url)?;
         let host = url.host_str().ok_or(SolanaClientError::NoHostName)?;
-        
+
         let mut builder = Request::builder()
             .method("GET")
             .header("Host", host)
