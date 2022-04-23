@@ -1,4 +1,5 @@
 [package]
+authors = ["Weiyuan Wu <dovah@crows.land>"]
 edition = "2021"
 name = "solana-client-async"
 version = "0.1.0"

@@ -27,10 +27,11 @@ use std::marker::PhantomData;
 use std::pin::Pin;
 use tokio::sync::{broadcast, mpsc, oneshot};
 use tokio_tungstenite::connect_async;
+use std::collections::HashMap;
 
 #[derive(Default, Debug, Clone)]
 pub struct ClientBuilder {
-    referrer: Option<String>,
+    headers: HashMap<String,String>,
     url: Option<String>,
     ws_url: Option<String>,
     ping_every: Option<u64>,
@@ -41,8 +42,8 @@ impl ClientBuilder {
         Default::default()
     }
 
-    pub fn referrer(&mut self, referrer: &str) -> &mut Self {
-        self.referrer = Some(referrer.into());
+    pub fn header(&mut self, name: &str, value: &str) -> &mut Self {
+        self.headers.insert(name.into(), value.into());
         self
     }
 
@@ -64,9 +65,9 @@ impl ClientBuilder {
     #[throws(SolanaClientError)]
     pub async fn build(&mut self) -> Client {
         let mut builder = Request::builder().uri(self.ws_url.as_ref().unwrap());
-        if let Some(referrer) = &self.referrer {
-            builder = builder.header("Referer", referrer);
-        }
+        for (key, value) in &self.headers {
+            builder = builder.header(key, value);
+        }       
 
         let (stream, _) = connect_async(builder.body(())?).await?;
 
@@ -81,7 +82,7 @@ macro_rules! unsubscribe_method {
     ($meth:ident) => {
         paste! {
             #[throws(SolanaClientError)]
-            pub async fn [<$meth _unsubscribe>](&mut self, subscription_id: usize) -> ResponseAwaiter<bool> {
+            pub async fn [<$meth _unsubscribe>](&mut self, subscription_id: u64) -> ResponseAwaiter<bool> {
                 let awaiter = self.request(concat!(stringify!($meth), "Unsubscribe"), &[subscription_id]).await?;
                 awaiter
             }
