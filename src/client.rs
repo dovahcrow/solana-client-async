@@ -23,15 +23,15 @@ use solana_client::rpc_config::{
 };
 use solana_sdk::pubkey::Pubkey;
 use solana_sdk::signature::Signature;
+use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::pin::Pin;
 use tokio::sync::{broadcast, mpsc, oneshot};
 use tokio_tungstenite::connect_async;
-use std::collections::HashMap;
 
 #[derive(Default, Debug, Clone)]
 pub struct ClientBuilder {
-    headers: HashMap<String,String>,
+    headers: HashMap<String, String>,
     url: Option<String>,
     ws_url: Option<String>,
     ping_every: Option<u64>,
@@ -67,7 +67,7 @@ impl ClientBuilder {
         let mut builder = Request::builder().uri(self.ws_url.as_ref().unwrap());
         for (key, value) in &self.headers {
             builder = builder.header(key, value);
-        }       
+        }
 
         let (stream, _) = connect_async(builder.body(())?).await?;
 
