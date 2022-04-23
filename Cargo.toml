@@ -21,6 +21,7 @@ thiserror = "1"
 tokio = "1"
 tokio-tungstenite = {version = "0.17", features = ["native-tls"]}
 tungstenite = "0.17"
+url = "2.2.2"
 
 [dev-dependencies]
 [features]

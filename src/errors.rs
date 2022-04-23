@@ -19,6 +19,9 @@ pub enum SolanaClientError {
     #[error("RPC Error: {code}: {message}")]
     RpcError { code: i64, message: String },
 
+    #[error("No host name")]
+    NoHostName,
+
     #[error("{0}")]
     Upstream(String),
 
@@ -33,6 +36,9 @@ pub enum SolanaClientError {
 
     #[error(transparent)]
     Http(#[from] http::Error),
+
+    #[error(transparent)]
+    Url(#[from] url::ParseError),
 }
 
 impl Clone for SolanaClientError {
@@ -44,6 +50,7 @@ impl Clone for SolanaClientError {
             Json(e) => Upstream(format!("Json error: {:?}", e)),
             Subscription(e) => Upstream(format!("Subscription error: {:?}", e)),
             Http(e) => Upstream(format!("Http error: {:?}", e)),
+            Url(e) => Upstream(format!("Url parse error: {:?}", e)),
             BackgroundProcessExited => BackgroundProcessExited,
             ResponderClosed => ResponderClosed,
             WsClosed(s) => WsClosed(s.clone()),
@@ -53,6 +60,7 @@ impl Clone for SolanaClientError {
             },
             Upstream(s) => Upstream(s.clone()),
             SubscriptionDropped => SubscriptionDropped,
+            NoHostName => NoHostName,
         }
     }
 }

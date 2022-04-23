@@ -28,6 +28,8 @@ use std::marker::PhantomData;
 use std::pin::Pin;
 use tokio::sync::{broadcast, mpsc, oneshot};
 use tokio_tungstenite::connect_async;
+use tungstenite::handshake::client::generate_key;
+use url::Url;
 
 #[derive(Default, Debug, Clone)]
 pub struct ClientBuilder {
@@ -64,7 +66,19 @@ impl ClientBuilder {
 
     #[throws(SolanaClientError)]
     pub async fn build(&mut self) -> Client {
-        let mut builder = Request::builder().uri(self.ws_url.as_ref().unwrap());
+        let ws_url = self.ws_url.as_ref().unwrap();
+        let url = Url::parse(ws_url)?;
+        let host = url.host_str().ok_or(SolanaClientError::NoHostName)?;
+        
+        let mut builder = Request::builder()
+            .method("GET")
+            .header("Host", host)
+            .header("Connection", "Upgrade")
+            .header("Upgrade", "websocket")
+            .header("Sec-WebSocket-Version", "13")
+            .header("Sec-WebSocket-Key", generate_key())
+            .uri(ws_url);
+
         for (key, value) in &self.headers {
             builder = builder.header(key, value);
         }
