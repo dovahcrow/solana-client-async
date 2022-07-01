@@ -17,7 +17,7 @@ use serde::Serialize;
 use serde_json::value::{RawValue, Value};
 use serde_json::{from_str, json, to_string};
 use solana_client::rpc_config::{
-    RpcAccountInfoConfig, /*RpcBlockSubscribeConfig, RpcBlockSubscribeFilter,*/
+    RpcAccountInfoConfig, RpcBlockSubscribeConfig, RpcBlockSubscribeFilter,
     RpcProgramAccountsConfig, RpcSignatureSubscribeConfig, RpcTransactionLogsConfig,
     RpcTransactionLogsFilter,
 };
@@ -140,19 +140,18 @@ impl Client {
     }
     unsubscribe_method!(account);
 
-    // commented out due to not support solana 1.9
-    // #[throws(SolanaClientError)]
-    // pub async fn block_subscribe(
-    //     &mut self,
-    //     filter: RpcBlockSubscribeFilter,
-    //     config: Option<RpcBlockSubscribeConfig>,
-    // ) -> ResponseAwaiter<u64> {
-    //     let awaiter = self
-    //         .request("blockSubscribe", &json! {[filter, config]})
-    //         .await?;
-    //     awaiter
-    // }
-    // unsubscribe_method!(block);
+    #[throws(SolanaClientError)]
+    pub async fn block_subscribe(
+        &mut self,
+        filter: RpcBlockSubscribeFilter,
+        config: Option<RpcBlockSubscribeConfig>,
+    ) -> ResponseAwaiter<u64> {
+        let awaiter = self
+            .request("blockSubscribe", &json! {[filter, config]})
+            .await?;
+        awaiter
+    }
+    unsubscribe_method!(block);
 
     #[throws(SolanaClientError)]
     pub async fn logs_subscribe(
