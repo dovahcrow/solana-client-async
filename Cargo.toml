@@ -14,9 +14,9 @@ log = "0.4"
 paste = "1"
 serde = "1"
 serde_json = {version = "1", features = ["raw_value"]}
-solana-account-decoder = "1.10"
-solana-client = "1.13"
-solana-sdk = "1.13"
+solana-account-decoder = "1.14"
+solana-client = "1.14"
+solana-sdk = "1.14"
 thiserror = "1"
 tokio = "1"
 tokio-tungstenite = {version = "0.17", features = ["native-tls"]}
